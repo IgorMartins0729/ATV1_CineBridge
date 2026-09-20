@@ -17,7 +17,7 @@ export class Avaliacao {
         return this.comentario;
     }
 
-    public getData(): data{
-        return this.nota;
+    public getData(): Date {
+        return this.data;
     }
 }
