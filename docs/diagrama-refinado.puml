@@ -1,0 +1,168 @@
+@startuml CineBridge - diagrama refinado
+' Diagrama de classes refinado a partir do esboço do enunciado (docs/informacoes-atv/diagrama-1.png).
+' Visualize em https://www.plantuml.com/plantuml ou com a extensão PlantUML do VS Code.
+skinparam classAttributeIconSize 0
+skinparam packageStyle rectangle
+hide empty members
+
+package "domain" {
+  enum Papel { DIRETOR\nDIRETOR_FOTOGRAFIA\nSONOPLASTA\nEDITOR\nROTEIRISTA\nEFEITOS_VISUAIS }
+  enum TipoCaptacao { DOCUMENTARIO\nFICCAO\nANIMACAO }
+  enum StatusConvite { PENDENTE\nACEITO\nRECUSADO\nCANCELADO }
+  enum StatusEquipe { EM_FORMACAO\nFORMADA }
+
+  interface Visitavel { +aceitar<R>(v: VisitanteProjeto<R>): R }
+  interface "VisitanteProjeto<R>" as VisitanteProjeto {
+    +visitarProjeto(projeto: Projeto): R
+    +visitarProfissional(profissional: Profissional): R
+  }
+
+  class Projeto implements Visitavel {
+    -id, titulo, genero: string
+    -duracao, orcamento: number
+    -prazo: Date
+    -tipoCaptacao: TipoCaptacao
+    -localizacao: Localizacao
+    -papeisObrigatorios: RequisitoPapel[]
+    -estrategia: string | null
+    -profissionaisRejeitados: Set<string>
+    +aceitarRecomendacao(papel, profissional)
+    +substituirMembro(papel, profissional): MembroEquipe
+    +rejeitarMembro(papel): MembroEquipe
+    +solicitarReavaliacao()
+    +verbaDoPapel(papel): number
+  }
+  class Profissional implements Visitavel {
+    -id, nome, email: string
+    -especialidades: Papel[]
+    -faixaPreco: FaixaPreco
+    -disponibilidade: Intervalo
+    -localizacao: Localizacao
+    +vetorCompetencias(dimensoes): number[]
+    +mediaAvaliacoes(): number
+    +estaDisponivelEm(data): boolean
+  }
+  class Equipe {
+    -id: string
+    -status: StatusEquipe
+    -dataFormacao: Date | null
+    +definirMembro(papel, profissional)
+    +confirmarMembro(papel, id)
+    +formar(papeis)
+    +custoTotal(): number
+  }
+  class MembroEquipe { -papel: Papel\n-confirmado: boolean\n+confirmar() }
+  class Competencia { -nome: string\n-nivel: number }
+  class Avaliacao { -nota: number\n-comentario: string\n-data: Date }
+  class Convite { -status: StatusConvite\n+aceitar()\n+recusar()\n+cancelar() }
+  class Recomendacao { -estrategia: string\n-ranking: Map<Papel, ProfissionalPontuado[]>\n-parcial: boolean }
+  class RequisitoPapel <<value>> { -papel: Papel\n-peso: number }
+  class Localizacao <<value>>
+  class Intervalo <<value>>
+  class FaixaPreco <<value>>
+
+  Projeto "1" *-- "1..*" RequisitoPapel
+  Projeto "1" o-- "0..1" Equipe
+  Equipe "1" *-- "1..*" MembroEquipe
+  MembroEquipe --> "1" Profissional : aloca
+  Profissional "1" *-- "1..*" Competencia
+  Profissional "1" *-- "0..*" Avaliacao
+  Convite --> Profissional
+  Recomendacao --> "0..*" Profissional
+  VisitanteProjeto ..> Projeto
+  VisitanteProjeto ..> Profissional
+}
+
+package "application" {
+  package "strategies (Strategy)" {
+    interface RecomendacaoStrategy {
+      +nome: string
+      +recomendar(projeto, profissionais, papeis?): Ranking
+    }
+    class SimilaridadeCosseno implements RecomendacaoStrategy
+    class FiltragemColaborativa implements RecomendacaoStrategy
+    class RegrasOrcamento implements RecomendacaoStrategy
+    class RegistroEstrategias { +obter(nome)\n+selecionarAutomatica(projeto) }
+    RegistroEstrategias o-- "1..*" RecomendacaoStrategy
+  }
+
+  package "orquestrador (Template Method)" {
+    abstract class OrquestradorEquipe {
+      +orquestrar(projeto, profissionais, estrategia, opcoes): ResultadoOrquestracao
+      #{abstract} validarRestricoes(projeto): string[]
+      #{abstract} normalizarDados(projeto, profissionais): Profissional[]
+      #{abstract} posProcessar(projeto, ranking): Ranking
+      -montarSugestoes(...): Equipe[]
+    }
+    class OrquestradorPadrao extends OrquestradorEquipe
+    OrquestradorEquipe ..> RecomendacaoStrategy : utiliza
+  }
+
+  package "observers (Observer)" {
+    interface Observador { +atualizar(evento: EventoRecomendacao) }
+    class SistemaRecomendacao {
+      -estrategiaAtual: RecomendacaoStrategy
+      +definirEstrategia(e)
+      +adicionarObservador(o)
+      +removerObservador(o)
+      +executarRecomendacao(projeto, opcoes): ResultadoRecomendacao
+      +notificarObservadores(evento)
+    }
+    class EventoRecomendacao { +tipo: TipoEvento\n+dados\n+origem: string\n+ocorridoEm: Date }
+    class NotificadorEmail implements Observador
+    class NotificadorInterno implements Observador
+    class AuditoriaRecomendacao implements Observador
+    class AtualizadorComposicaoEquipe implements Observador
+    SistemaRecomendacao --> OrquestradorEquipe
+    SistemaRecomendacao --> RegistroEstrategias
+    SistemaRecomendacao ..> EventoRecomendacao : gera
+  }
+
+  package "visitors (Visitor)" {
+    class ValidadorConsistencia
+    class CalculadorCompatibilidade
+    class GeradorRelatorio
+  }
+  VisitanteProjeto <|.. ValidadorConsistencia
+  VisitanteProjeto <|.. CalculadorCompatibilidade
+  VisitanteProjeto <|.. GeradorRelatorio
+
+  package "services (casos de uso)" {
+    class ProjetoService
+    class GestaoEquipeService
+    class ConviteService
+    class ProvedorProfissionais <<timeout + circuit breaker + cache + fallback>>
+  }
+  GestaoEquipeService --> SistemaRecomendacao
+  ConviteService --> SistemaRecomendacao
+  SistemaRecomendacao --> ProvedorProfissionais
+  AtualizadorComposicaoEquipe --> GestaoEquipeService
+
+  package "ports (interfaces - inversão de dependência)" {
+    interface IProfissionalRepository
+    interface IProjetoRepository
+    interface IConviteRepository
+    interface IRecomendacaoRepository
+    interface IEventBus { +publicar(evento)\n+assinar(tipo, manipulador) }
+    interface ILogger
+  }
+  SistemaRecomendacao --> IEventBus
+  ProvedorProfissionais --> IProfissionalRepository
+}
+
+package "infrastructure" {
+  class NodeEventBus <<EventEmitter>> implements IEventBus
+  class "Repositórios em memória" as Memoria
+  class "Repositórios Prisma (PostgreSQL)" as Prisma
+  class IntegracaoMicrosservico implements Observador
+  class "Fastify (rotas REST)" as Http
+  Memoria ..|> IProfissionalRepository
+  Prisma ..|> IProfissionalRepository
+}
+
+package "config" {
+  class container <<composition root>>
+}
+container ..> SistemaRecomendacao : monta e injeta
+Http --> GestaoEquipeService
+@enduml

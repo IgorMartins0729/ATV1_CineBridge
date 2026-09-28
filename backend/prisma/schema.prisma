@@ -1,8 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Mapeamento das entidades do CineBridge para o PostgreSQL.
+// Docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -11,4 +8,185 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum Papel {
+  DIRETOR
+  DIRETOR_FOTOGRAFIA
+  SONOPLASTA
+  EDITOR
+  ROTEIRISTA
+  EFEITOS_VISUAIS
+}
+
+enum TipoCaptacao {
+  DOCUMENTARIO
+  FICCAO
+  ANIMACAO
+}
+
+enum StatusConvite {
+  PENDENTE
+  ACEITO
+  RECUSADO
+  CANCELADO
+}
+
+enum StatusEquipe {
+  EM_FORMACAO
+  FORMADA
+}
+
+model Profissional {
+  id              String   @id
+  nome            String
+  email           String
+  especialidades  Papel[]
+  precoMinimo     Float    @map("preco_minimo")
+  precoMaximo     Float    @map("preco_maximo")
+  /// (mínimo + máximo) / 2, guardado para filtrar por preço com índice
+  precoMedio      Float    @map("preco_medio")
+  disponivelDe    DateTime @map("disponivel_de")
+  disponivelAte   DateTime @map("disponivel_ate")
+  cidade          String
+  uf              String   @db.Char(2)
+
+  competencias    Competencia[]
+  avaliacoes      Avaliacao[]
+  historico       ProjetoAnterior[]
+  membros         MembroEquipe[]
+  convites        Convite[]
+
+  // Consultas de candidatos filtram por especialidade (GIN no array), disponibilidade e preço.
+  @@index([especialidades], type: Gin)
+  @@index([disponivelDe, disponivelAte])
+  @@index([precoMedio])
+  @@map("profissionais")
+}
+
+model Competencia {
+  id             Int          @id @default(autoincrement())
+  profissionalId String       @map("profissional_id")
+  nome           String
+  nivel          Float
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@unique([profissionalId, nome])
+  @@map("competencias")
+}
+
+model Avaliacao {
+  id             Int          @id @default(autoincrement())
+  profissionalId String       @map("profissional_id")
+  nota           Float
+  comentario     String
+  data           DateTime
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([profissionalId])
+  @@map("avaliacoes")
+}
+
+model ProjetoAnterior {
+  id             Int          @id @default(autoincrement())
+  profissionalId String       @map("profissional_id")
+  titulo         String
+  genero         String
+  tipoCaptacao   TipoCaptacao @map("tipo_captacao")
+  ano            Int
+  profissional   Profissional @relation(fields: [profissionalId], references: [id], onDelete: Cascade)
+
+  @@index([profissionalId])
+  @@map("projetos_anteriores")
+}
+
+model Projeto {
+  id              String         @id
+  titulo          String
+  produtorId      String         @map("produtor_id")
+  produtorNome    String         @map("produtor_nome")
+  produtorEmail   String         @map("produtor_email")
+  genero          String
+  duracao         Float
+  orcamento       Float
+  prazo           DateTime
+  tipoCaptacao    TipoCaptacao   @map("tipo_captacao")
+  cidade          String
+  uf              String         @db.Char(2)
+  estrategia      String?
+  /// ids dos profissionais rejeitados pelo produtor neste projeto
+  rejeitados      String[]
+  criadoEm        DateTime       @default(now()) @map("criado_em")
+
+  papeis          RequisitoPapel[]
+  equipe          Equipe?
+  convites        Convite[]
+  recomendacoes   Recomendacao[]
+
+  @@index([produtorId])
+  @@map("projetos")
+}
+
+model RequisitoPapel {
+  projetoId String  @map("projeto_id")
+  papel     Papel
+  peso      Float
+  projeto   Projeto @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+
+  @@id([projetoId, papel])
+  @@map("requisitos_papel")
+}
+
+model Equipe {
+  id           String         @id
+  projetoId    String         @unique @map("projeto_id")
+  status       StatusEquipe
+  dataFormacao DateTime?      @map("data_formacao")
+  projeto      Projeto        @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  membros      MembroEquipe[]
+
+  @@map("equipes")
+}
+
+model MembroEquipe {
+  equipeId       String       @map("equipe_id")
+  papel          Papel
+  profissionalId String       @map("profissional_id")
+  confirmado     Boolean      @default(false)
+  equipe         Equipe       @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  profissional   Profissional @relation(fields: [profissionalId], references: [id])
+
+  @@id([equipeId, papel])
+  @@unique([equipeId, profissionalId])
+  @@map("membros_equipe")
+}
+
+model Convite {
+  id             String        @id
+  projetoId      String        @map("projeto_id")
+  papel          Papel
+  profissionalId String        @map("profissional_id")
+  status         StatusConvite
+  criadoEm       DateTime      @map("criado_em")
+  respondidoEm   DateTime?     @map("respondido_em")
+  projeto        Projeto       @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+  profissional   Profissional  @relation(fields: [profissionalId], references: [id])
+
+  @@index([projetoId])
+  @@map("convites")
+}
+
+model Recomendacao {
+  id                  String   @id
+  projetoId           String   @map("projeto_id")
+  estrategia          String
+  parcial             Boolean
+  papeisSemCandidatos Papel[]  @map("papeis_sem_candidatos")
+  /// { [papel]: [{ profissionalId, pontuacao }] } — snapshot do ranking para auditoria
+  ranking             Json
+  geradaEm            DateTime @map("gerada_em")
+  projeto             Projeto  @relation(fields: [projetoId], references: [id], onDelete: Cascade)
+
+  @@index([projetoId])
+  @@map("recomendacoes")
 }

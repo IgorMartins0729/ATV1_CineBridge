@@ -1,23 +1,31 @@
-export class Avaliacao {
-    private nota: number
-    private comentario: string
-    private data: Date
+import { ValidacaoError } from '../erros.js';
 
-    constructor(nota: number, comentario: string, data: Date){
+export class Avaliacao {
+    private readonly nota: number;
+    private readonly comentario: string;
+    private readonly data: Date;
+
+    constructor(nota: number, comentario: string, data: Date) {
+        if (!Number.isFinite(nota) || nota < 0 || nota > 5) {
+            throw new ValidacaoError('Nota da avaliação deve estar entre 0 e 5');
+        }
+        if (Number.isNaN(data.getTime())) {
+            throw new ValidacaoError('Data da avaliação inválida');
+        }
         this.nota = nota;
         this.comentario = comentario;
-        this.data = data;
+        this.data = new Date(data);
     }
 
-    public getNota(): number{
+    public getNota(): number {
         return this.nota;
     }
 
-    public getComentario(): string{
+    public getComentario(): string {
         return this.comentario;
     }
 
     public getData(): Date {
-        return this.data;
+        return new Date(this.data);
     }
 }

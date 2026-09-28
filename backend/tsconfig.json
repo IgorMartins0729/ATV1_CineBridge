@@ -1,9 +1,7 @@
 {
+  // Configuração base: usada pelo editor e pelo typecheck (src + testes + scripts).
+  // O build usa tsconfig.build.json, que compila apenas src/.
   "compilerOptions": {
-    // Estrutura de arquivos
-    "rootDir": "./src",
-    "outDir": "./dist",
-
     // Ambiente
     "module": "nodenext",
     "target": "esnext",
@@ -28,7 +26,8 @@
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": ["src", "tests", "scripts", "prisma", "vitest.config.ts"]
 }
