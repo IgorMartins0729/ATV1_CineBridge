@@ -1,4 +1,4 @@
-import { Profissional } from "../../domain/entities/Profissional.js";
+import type { Profissional } from "../../domain/entities/Profissional.js";
 
 export interface IProfissionalRepository {
     listarTodos(): Promise<Profissional[]>;

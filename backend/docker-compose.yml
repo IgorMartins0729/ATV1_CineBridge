@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: cinebridge-postgres
+    environment:
+      POSTGRES_USER: cinebridge
+      POSTGRES_PASSWORD: cinebridge
+      POSTGRES_DB: cinebridge_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  pgdata:
